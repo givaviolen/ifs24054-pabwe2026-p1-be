@@ -1,0 +1,16 @@
+{
+  "name": "tobawatersafe-backend",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/server.js",
+    "start": "bun src/server.js",
+    "test": "bun test",
+    "build": "echo \"Back-End tidak memerlukan build\""
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.21.2"
+  }
+}
