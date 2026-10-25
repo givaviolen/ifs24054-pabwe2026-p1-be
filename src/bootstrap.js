@@ -1,6 +1,6 @@
 // Persiapan database yang dipakai bersama oleh server lokal (server.js) dan Vercel (api/index.js).
-import { seedSpots, seedSampleConditions } from "./db.js";
-import { registerUser } from "./auth.js";
+import { seedSpots, seedSampleConditions } from "./database/seed.js";
+import { registerUser } from "./services/authService.js";
 
 // Membuat akun petugas awal dari environment variable (PETUGAS_USERNAME + PETUGAS_PASSWORD).
 // Berguna di Vercel: database di /tmp dibuat ulang saat instance daur ulang, sehingga akun hasil

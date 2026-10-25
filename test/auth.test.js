@@ -1,12 +1,14 @@
 import { describe, test, expect, beforeEach } from "bun:test";
-import { createDb } from "../src/db.js";
+import { createDb } from "../src/database/connection.js";
+import { AuthError } from "../src/errors/AuthError.js";
 import {
-  AuthError, registerUser, verifyLogin, createSession, getUserByToken, deleteSession,
-} from "../src/auth.js";
+  registerUser, verifyLogin, createSession, getUserByToken, isPetugasCodeValid,
+} from "../src/services/authService.js";
 
 let db;
 beforeEach(() => { db = createDb(":memory:"); });
 
+const SECRET = "rahasia-uji";
 const valid = { username: "Petugas1", nama: "Budi Sitorus", password: "rahasia123" };
 
 describe("registerUser", () => {
@@ -41,24 +43,45 @@ describe("login & sesi", () => {
     expect(await verifyLogin(db, "petugas1", "salah")).toBeNull();
     expect(await verifyLogin(db, "tidakada", "rahasia123")).toBeNull();
   });
-  test("token valid -> user, token palsu -> null, logout menghapus sesi", async () => {
+  test("token valid -> user, token palsu/rusak -> null", async () => {
     const u = await registerUser(db, valid);
-    const token = createSession(db, u.id);
-    expect(getUserByToken(db, token).id).toBe(u.id);
-    expect(getUserByToken(db, "palsu")).toBeNull();
-    expect(getUserByToken(db, null)).toBeNull();
-    deleteSession(db, token);
-    expect(getUserByToken(db, token)).toBeNull();
+    const token = createSession(u, SECRET);
+    expect(getUserByToken(db, token, SECRET).id).toBe(u.id);
+    for (const bad of ["palsu", "a.b", "a.b.c", "", null, undefined, 123]) {
+      expect(getUserByToken(db, bad, SECRET)).toBeNull();
+    }
   });
-  test("token tidak disimpan mentah di database", async () => {
+  test("token dengan tanda tangan diubah atau kunci berbeda ditolak", async () => {
     const u = await registerUser(db, valid);
-    const token = createSession(db, u.id);
-    expect(db.query("SELECT token_hash FROM sessions").get().token_hash).not.toBe(token);
+    const token = createSession(u, SECRET);
+    expect(getUserByToken(db, token, "kunci-lain")).toBeNull();
+    const [payload, signature] = token.split(".");
+    const forged = Buffer.from(JSON.stringify({ sub: u.username, exp: Date.now() + 1e12 })).toString("base64url");
+    expect(getUserByToken(db, `${forged}.${signature}`, SECRET)).toBeNull();
+    expect(getUserByToken(db, `${payload}.x${signature.slice(1)}`, SECRET)).toBeNull();
   });
-  test("sesi kedaluwarsa ditolak", async () => {
+  test("token sah di database mana pun yang memuat akun yang sama (antar instance)", async () => {
     const u = await registerUser(db, valid);
-    const token = createSession(db, u.id);
-    db.run("UPDATE sessions SET expires_at = datetime('now','-1 minute')");
-    expect(getUserByToken(db, token)).toBeNull();
+    const token = createSession(u, SECRET);
+    const instanceLain = createDb(":memory:");
+    await registerUser(instanceLain, valid);
+    expect(getUserByToken(instanceLain, token, SECRET).username).toBe("petugas1");
+    expect(getUserByToken(createDb(":memory:"), token, SECRET)).toBeNull(); // akun tidak ada di instance itu
+  });
+  test("token kedaluwarsa ditolak", async () => {
+    const u = await registerUser(db, valid);
+    const token = createSession(u, SECRET, 1, Date.now() - 2 * 3_600_000);
+    expect(getUserByToken(db, token, SECRET)).toBeNull();
+  });
+});
+
+describe("isPetugasCodeValid", () => {
+  test("cocok hanya bila kode sama persis", () => {
+    expect(isPetugasCodeValid("KODE", "KODE")).toBe(true);
+    expect(isPetugasCodeValid("kode", "KODE")).toBe(false);
+    expect(isPetugasCodeValid("", "KODE")).toBe(false);
+  });
+  test("tanpa kode yang diharapkan, registrasi selalu ditolak", () => {
+    expect(isPetugasCodeValid("apa saja", null)).toBe(false);
   });
 });

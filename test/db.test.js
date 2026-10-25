@@ -1,16 +1,21 @@
 import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { createDb, seedSpots, migrate, SEED_SPOTS } from "../src/db.js";
+import { createDb, resolveDbPath } from "../src/database/connection.js";
+import { migrate } from "../src/database/schema.js";
+import { seedSpots, seedSampleConditions } from "../src/database/seed.js";
+import { SEED_SPOTS } from "../src/data/spots.js";
+import { VALID_STATUS } from "../src/constants/index.js";
+import { seedPetugas } from "../src/bootstrap.js";
 
 describe("data pantai", () => {
   test("nama unik, status valid, koordinat berada di sekitar Danau Toba", () => {
-    const names = SEED_SPOTS.map((s) => s[0]);
+    const names = SEED_SPOTS.map((s) => s.nama_pantai);
     expect(new Set(names).size).toBe(names.length);
     expect(SEED_SPOTS.length).toBeGreaterThanOrEqual(15);
-    for (const [, , , , , status, lat, lng] of SEED_SPOTS) {
-      expect(["AMAN", "WASPADA", "BAHAYA"]).toContain(status);
-      expect(lat).toBeGreaterThan(2.0); expect(lat).toBeLessThan(3.1);
-      expect(lng).toBeGreaterThan(98.4); expect(lng).toBeLessThan(99.2);
+    for (const { current_status, latitude, longitude } of SEED_SPOTS) {
+      expect(VALID_STATUS).toContain(current_status);
+      expect(latitude).toBeGreaterThan(2.0); expect(latitude).toBeLessThan(3.1);
+      expect(longitude).toBeGreaterThan(98.4); expect(longitude).toBeLessThan(99.2);
     }
   });
 
@@ -46,15 +51,13 @@ describe("migrasi database lama", () => {
 });
 
 describe("bootstrap & deployment", () => {
-  test("resolveDbPath: /tmp di Vercel, DB_PATH diutamakan", async () => {
-    const { resolveDbPath } = await import("../src/db.js");
+  test("resolveDbPath: /tmp di Vercel, DB_PATH diutamakan", () => {
     expect(resolveDbPath({ VERCEL: "1" })).toBe("/tmp/tobawatersafe.sqlite");
     expect(resolveDbPath({ VERCEL: "1", DB_PATH: ":memory:" })).toBe(":memory:");
     expect(resolveDbPath({})).toBe("tobawatersafe.sqlite");
   });
 
-  test("seedSampleConditions membuat satu log per pantai dan idempotent", async () => {
-    const { seedSampleConditions } = await import("../src/db.js");
+  test("seedSampleConditions membuat satu log per pantai dan idempotent", () => {
     const db = createDb(":memory:");
     seedSpots(db);
     expect(seedSampleConditions(db)).toBe(SEED_SPOTS.length);
@@ -63,7 +66,6 @@ describe("bootstrap & deployment", () => {
   });
 
   test("seedPetugas hanya membuat akun bila env lengkap, dan tidak menggandakan", async () => {
-    const { seedPetugas } = await import("../src/bootstrap.js");
     const db = createDb(":memory:");
     expect(await seedPetugas(db, {})).toBeNull();
     const env = { PETUGAS_USERNAME: "Admin.Toba", PETUGAS_PASSWORD: "rahasia123" };

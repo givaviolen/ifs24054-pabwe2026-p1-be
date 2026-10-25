@@ -1,5 +1,7 @@
 import { describe, test, expect, beforeAll, afterAll } from "bun:test";
-import { createDb, seedSpots, SEED_SPOTS } from "../src/db.js";
+import { createDb } from "../src/database/connection.js";
+import { seedSpots } from "../src/database/seed.js";
+import { SEED_SPOTS } from "../src/data/spots.js";
 import { createApp } from "../src/app.js";
 
 let server, base, db;
